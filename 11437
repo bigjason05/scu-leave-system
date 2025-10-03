@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>議會線上請假系統</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- jsPDF for PDF generation -->
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <!-- SheetJS for .xlsx export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    @media print { .no-print { display:none; } }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <header class="sticky top-0 z-10 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <h1 class="text-xl font-bold">議會線上請假系統</h1>
+      <nav class="text-sm flex gap-3 no-print">
+        <a href="#/" class="hover:underline">填寫請假單</a>
+        <a href="#/admin" class="hover:underline">管理後台</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="app" class="max-w-6xl mx-auto px-4 py-6"></main>
+
+  <!-- ====== 前台：請假表單 ====== -->
+  <template id="form-template">
+    <section class="bg-white shadow rounded-2xl p-6">
+      <h2 class="text-lg font-semibold mb-4">填寫請假單</h2>
+      <p class="text-sm text-slate-500 mb-6">* 號為必填。送出後資料將標示為「待審核」，並通知管理員。</p>
+      <form id="leave-form" class="grid grid-cols-1 md:grid-cols-2 gap-4" novalidate>
+        <!-- 姓名（必填） -->
+        <div>
+          <label class="block text-sm font-medium mb-1">申請人姓名 <span class="text-rose-600">*</span></label>
+          <input name="applicant" required type="text" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" placeholder="例如：洪振翔" />
+          <p class="form-error text-xs text-rose-600 hidden mt-1">請填寫申請人姓名</p>
+        </div>
+        <!-- 學號（選填） -->
+        <div>
+          <label class="block text-sm font-medium mb-1">學號（選填）</label>
+          <input name="studentId" type="text" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" placeholder="例如：A12345678" />
+        </div>
+
+        <!-- Email（通知申請人用） -->
+        <div>
+          <label class="block text-sm font-medium mb-1">Email（用於通知審核結果） <span class="text-rose-600">*</span></label>
+          <input name="email" required type="email" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" placeholder="your@email.com" />
+          <p class="form-error text-xs text-rose-600 hidden mt-1">請填寫有效 Email</p>
+        </div>
+
+        <!-- 身分別 -->
+        <div>
+          <label class="block text-sm font-medium mb-1">身分別 <span class="text-rose-600">*</span></label>
+          <select name="role" required class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400">
+            <option value="">請選擇</option>
+            <option>學生議員</option>
+            <option>學生會行政部門</option>
+          </select>
+          <p class="form-error text-xs text-rose-600 hidden mt-1">請選擇身分別</p>
+        </div>
+
+        <!-- 會議日期（民國紀年顯示） -->
+        <div>
+          <label class="block text-sm font-medium mb-1">請假會議日期 <span class="text-rose-600">*</span></label>
+          <input name="date" type="date" required class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" />
+          <p class="text-xs text-slate-500 mt-1">後台與PDF將以民國紀年顯示</p>
+          <p class="form-error text-xs text-rose-600 hidden mt-1">請選擇會議日期</p>
+        </div>
+
+        <!-- 會議別 -->
+        <div>
+          <label class="block text-sm font-medium mb-1">會議別 <span class="text-rose-600">*</span></label>
+          <select name="meetingType" required class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400">
+            <option value="">請選擇</option>
+            <option>大會</option>
+            <option>學權委員會</option>
+            <option>紀律委員會</option>
+            <option>法制委員會</option>
+            <option>財政委員會</option>
+          </select>
+          <p class="form-error text-xs text-rose-600 hidden mt-1">請選擇會議別</p>
+        </div>
+
+        <!-- 假別 -->
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">假別 <span class="text-rose-600">*</span></label>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="leaveType" value="病假" required class="accent-slate-700">病假</label>
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="leaveType" value="事假" class="accent-slate-700">事假</label>
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="leaveType" value="生理假" class="accent-slate-700">生理假</label>
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="leaveType" value="身心調適假" class="accent-slate-700">身心調適假</label>
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="leaveType" value="公假" class="accent-slate-700">公假</label>
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="leaveType" value="喪假" class="accent-slate-700">喪假</label>
+            <label class="inline-flex items-center gap-2 text-sm md:col-span-2"><input type="radio" name="leaveType" value="其他" class="accent-slate-700">其他</label>
+          </div>
+          <p class="form-error text-xs text-rose-600 hidden mt-1">請選擇假別</p>
+        </div>
+
+        <!-- 請假原因 -->
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">請假原因 <span class="text-rose-600">*</span></label>
+          <textarea name="reason" required rows="4" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" placeholder="請簡述請假原因"></textarea>
+          <p class="form-error text-xs text-rose-600 hidden mt-1">請填寫請假原因</p>
+        </div>
+
+        <!-- 備註 -->
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">備註</label>
+          <textarea name="note" rows="3" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" placeholder="（選填）其他補充事項"></textarea>
+        </div>
+
+        <!-- 證明檔上傳 -->
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium mb-1">證明檔上傳（影像或PDF，單一檔案）</label>
+          <input name="proof" type="file" accept="image/*,application/pdf" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400 bg-white file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border file:bg-slate-50" />
+          <p class="text-xs text-slate-500 mt-1">若上傳PDF，後台可直接開啟；若為圖片，會於新視窗預覽。</p>
+        </div>
+
+        <div class="md:col-span-2 flex items-center justify-between pt-2">
+          <p class="text-xs text-slate-500">送出後將自動建立 PDF 檔，並通知管理員（susc@gm.scu.edu.tw）。</p>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800">送出請假單</button>
+        </div>
+      </form>
+    </section>
+  </template>
+
+  <!-- ====== 後台：登入 ====== -->
+  <template id="admin-login-template">
+    <section class="max-w-md mx-auto bg-white shadow rounded-2xl p-6">
+      <h2 class="text-lg font-semibold mb-4">管理後台登入</h2>
+      <form id="admin-login" class="grid gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">帳號</label>
+          <input name="username" type="text" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" placeholder="請輸入帳號" required />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">密碼</label>
+          <input name="password" type="password" class="w-full rounded-xl border-slate-300 focus:ring-2 focus:ring-slate-400" placeholder="請輸入密碼" required />
+        </div>
+        <button class="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800">登入</button>
+      </form>
+      <p class="text-xs text-slate-500 mt-3">預設管理帳號：<span class="font-mono">susc0037</span>／密碼：<span class="font-mono">suscccc</span></p>
+    </section>
+  </template>
+
+  <!-- ====== 後台：主控台 ====== -->
+  <template id="admin-panel-template">
+    <section class="bg-white shadow rounded-2xl p-6">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <h2 class="text-lg font-semibold">管理後台</h2>
+        <div class="flex items-center gap-2 no-print">
+          <button id="export-xlsx" class="px-3 py-1.5 rounded-lg border">匯出XLSX（試算表）</button>
+          <button id="export-csv" class="px-3 py-1.5 rounded-lg border">匯出CSV</button>
+          <button id="export-json" class="px-3 py-1.5 rounded-lg border">匯出JSON</button>
+          <button id="logout-btn" class="px-3 py-1.5 rounded-lg border">登出</button>
+        </div>
+      </div>
+
+      <!-- 篩選列 -->
+      <div class="mt-4 grid grid-cols-1 md:grid-cols-6 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">會議日期（起）</label>
+          <input id="filter-date-start" type="date" class="w-full rounded-xl border-slate-300" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">會議日期（迄）</label>
+          <input id="filter-date-end" type="date" class="w-full rounded-xl border-slate-300" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">會議別</label>
+          <select id="filter-meeting" class="w-full rounded-xl border-slate-300">
+            <option value="">全部</option>
+            <option>大會</option>
+            <option>學權委員會</option>
+            <option>紀律委員會</option>
+            <option>法制委員會</option>
+            <option>財政委員會</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">審核狀態</label>
+          <select id="filter-status" class="w-full rounded-xl border-slate-300">
+            <option value="">全部</option>
+            <option>待審核</option>
+            <option>已通過</option>
+            <option>未通過</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">身分別</label>
+          <select id="filter-role" class="w-full rounded-xl border-slate-300">
+            <option value="">全部</option>
+            <option>學生議員</option>
+            <option>學生會行政部門</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">申請人（姓名/學號）</label>
+          <input id="filter-q" type="text" class="w-full rounded-xl border-slate-300" placeholder="輸入關鍵字" />
+        </div>
+        <div class="md:col-span-6 flex items-end gap-2">
+          <button id="apply-filters" class="px-3 py-2 rounded-xl bg-slate-900 text-white">套用篩選</button>
+          <button id="clear-filters" class="px-3 py-2 rounded-xl border">清除篩選</button>
+        </div>
+      </div>
+
+      <!-- 資料表 -->
+      <div class="mt-6 overflow-x-auto">
+        <table class="w-full text-sm" id="records-table">
+          <thead>
+            <tr class="border-b bg-slate-50">
+              <th class="text-left p-2">序號</th>
+              <th class="text-left p-2">身分別</th>
+              <th class="text-left p-2">申請人</th>
+              <th class="text-left p-2">學號</th>
+              <th class="text-left p-2">會議日期（民國）</th>
+              <th class="text-left p-2">會議別</th>
+              <th class="text-left p-2">假別</th>
+              <th class="text-left p-2">申請原因</th>
+              <th class="text-left p-2">申請時間</th>
+              <th class="text-left p-2">審核狀態</th>
+              <th class="text-left p-2">操作</th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="mt-2 text-xs text-slate-500">共 <span id="count"></span> 筆</div>
+
+    </section>
+  </template>
+
+  <!-- ====== 詳情/審核 Modal ====== -->
+  <div id="detail-modal" class="fixed inset-0 hidden items-center justify-center bg-black/40 z-50">
+    <div class="bg-white w-[95%] max-w-2xl rounded-2xl p-6 shadow-xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-semibold">請假詳情 / 審核</h3>
+        <button id="detail-close" class="px-3 py-1 rounded-lg border">關閉</button>
+      </div>
+      <div id="detail-body" class="text-sm space-y-2 max-h-[60vh] overflow-auto"></div>
+      <div id="review-area" class="mt-4 border-t pt-3 hidden">
+        <label class="block text-sm font-medium mb-1">審核意見（選填）</label>
+        <textarea id="review-comment" rows="3" class="w-full rounded-xl border-slate-300"></textarea>
+        <div class="mt-3 flex gap-2">
+          <button id="btn-approve" class="px-3 py-2 rounded-xl bg-emerald-600 text-white">通過</button>
+          <button id="btn-reject" class="px-3 py-2 rounded-xl bg-rose-600 text-white">不通過</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 送出成功談窗 -->
+  <div id="submit-modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-2xl p-6 shadow-xl w-[90%] max-w-sm text-center">
+      <h3 class="text-lg font-semibold">已送出請假單</h3>
+      <p class="text-sm text-slate-600 mt-2">系統已建立 PDF，並已嘗試通知管理員（susc@gm.scu.edu.tw）。</p>
+      <div class="mt-4 flex gap-2 justify-center">
+        <a href="#/admin" class="px-4 py-2 rounded-xl border">前往後台</a>
+        <button id="close-submit-modal" class="px-4 py-2 rounded-xl bg-slate-900 text-white">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'scu_leave_records_v2';
+    const ADMIN_KEY = 'scu_leave_admin_login';
+    const ADMIN_EMAIL = 'susc@gm.scu.edu.tw';
+    const NOTIFY_WEBHOOK = '';// 可配置成你的Webhook URL（如GAS/Cloudflare）
+
+    function uid() { return 'L' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+    function loadRecords() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
+    function saveRecords(list) { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+    function saveAdminLogin(flag) { localStorage.setItem(ADMIN_KEY, JSON.stringify({ loggedIn: !!flag, ts: Date.now() })); }
+    function isAdminLoggedIn() { try { return JSON.parse(localStorage.getItem(ADMIN_KEY))?.loggedIn; } catch { return false; } }
+
+    function formatDateTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      return `${y}-${m}-${day} ${hh}:${mm}`;
+    }
+    function toROC(dateStr) {
+      if (!dateStr) return '';
+      const [y,m,d] = dateStr.split('-').map(Number);
+      if (!y||!m||!d) return dateStr;
+      return `民國${y-1911}年${String(m).padStart(2,'0')}月${String(d).padStart(2,'0')}日`;
+    }
+    function escapeHtml(unsafe='') {
+      // 僅使用字串型 replaceAll，避免正則誤用造成 SyntaxError
+      return unsafe
+        .replaceAll('&','&amp;')
+        .replaceAll('<','&lt;')
+        .replaceAll('>','&gt;')
+        .replaceAll('"','&quot;')
+        .replaceAll("'",'&#039;');
+    }
+    function readFileAsDataURL(file) { return new Promise((res, rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+
+    // ===== 通知（信件/訊息） =====
+    async function notifyAdminNew(rec) {
+      const subject = encodeURIComponent(`[請假申請] ${rec.applicant}（${rec.role}）`);
+      const body = encode
+
